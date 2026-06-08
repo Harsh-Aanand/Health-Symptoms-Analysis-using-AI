@@ -1,0 +1,159 @@
+{
+  "id": "vitalcheck-ai-symptom-checker",
+  "name": "VitalCheck AI: Health Symptom Checker",
+  "description": "Multi-agent triage assistant leveraging IBM Granite and RAG validation templates.",
+  "data": {
+    "nodes": [
+      {
+        "id": "chat-input-node",
+        "type": "ChatInput",
+        "data": {
+          "label": "User Symptom Input",
+          "node": {
+            "template": {
+              "input_value": {
+                "type": "str",
+                "value": "I have been experiencing a sharp, persistent pain in my lower right abdomen for the past 6 hours. It gets worse when I move or press on it, and I feel slightly nauseous."
+              }
+            }
+          }
+        },
+        "position": { "x": 100, "y": 300 }
+      },
+      {
+        "id": "demographics-node",
+        "type": "PromptTemplate",
+        "data": {
+          "label": "User Context Aggregator",
+          "node": {
+            "template": {
+              "template_string": {
+                "type": "str",
+                "value": "User Age: 24\nUser Gender: Male\nSymptom Duration: 6 Hours\nReported Symptoms: {user_input}"
+              }
+            }
+          }
+        },
+        "position": { "x": 350, "y": 200 }
+      },
+      {
+        "id": "watsonx-guardrail-node",
+        "type": "Guardrail",
+        "data": {
+          "label": "IBM Cloud Safety Filter",
+          "node": {
+            "template": {
+              "filter_non_medical": { "type": "bool", "value": true },
+              "block_toxic_inputs": { "type": "bool", "value": true }
+            }
+          }
+        },
+        "position": { "x": 600, "y": 150 }
+      },
+      {
+        "id": "granite-prompt-node",
+        "type": "PromptTemplate",
+        "data": {
+          "label": "Triage Instruction Matrix",
+          "node": {
+            "template": {
+              "template_string": {
+                "type": "str",
+                "value": "You are VitalCheck AI, an advanced, highly objective healthcare triage assistant powered by the IBM Granite reasoning engine.\n\nCRITICAL DIRECTIVE:\n- Do NOT provide a definitive medical diagnosis.\n- Maintain absolute clinical neutrality.\n- Present a mandatory liability disclaimer at the top of your response stating that this is an educational tool.\n\nEVALUATION PROTOCOL:\nAnalyze the provided symptom profile and reference data to establish a strict Triage Classification Level:\n1. LEVEL 1: SELF CARE (Green) -> Minor, non-progressive symptoms. Recommend basic home comfort steps.\n2. LEVEL 2: URGENT CARE (Yellow) -> Sub-acute or persistent symptoms. Recommend booking a physical consultation with a specific clinical specialist field (e.g., Cardiologist, Gastroenterologist, Neurologist, ENT).\n3. LEVEL 3: EMERGENCY PROTOCOL (Red) -> High-risk indicators (e.g., chest pain, sudden numbness, severe abdominal localized pain). Flag immediately for emergency dispatch.\n\nInput Context Profile:\n{aggregated_context}\n\nVerified Clinical Reference Information:\n{rag_medical_docs}\n\nGenerate a clean, professional, structured breakdown covering: Urgency Level, Specialized Field Mapping, Next Steps, and Safety Warnings."
+              }
+            }
+          }
+        },
+        "position": { "x": 600, "y": 350 }
+      },
+      {
+        "id": "medical-vector-db",
+        "type": "VectorStore",
+        "data": {
+          "label": "Verified Medical Database (RAG)",
+          "node": {
+            "template": {
+              "collection_name": { "type": "str", "value": "clinical_triage_guidelines" },
+              "search_type": { "type": "str", "value": "Similarity" },
+              "number_of_results": { "type": "int", "value": 3 }
+            }
+          }
+        },
+        "position": { "x": 350, "y": 550 }
+      },
+      {
+        "id": "ibm-granite-llm",
+        "type": "WatsonxModel",
+        "data": {
+          "label": "IBM Granite Engine",
+          "node": {
+            "template": {
+              "model_id": { "type": "str", "value": "ibm-granite-3-2-8b-instruct" },
+              "temperature": { "type": "float", "value": 0.2 },
+              "decoding_method": { "type": "str", "value": "greedy" },
+              "project_id": { "type": "str", "value": "YOUR_WATSONX_PROJECT_ID" }
+            }
+          }
+        },
+        "position": { "x": 900, "y": 350 }
+      },
+      {
+        "id": "chat-output-node",
+        "type": "ChatOutput",
+        "data": {
+          "label": "Structured Triage Output",
+          "node": {
+            "template": {
+              "output_value": { "type": "str", "value": "" }
+            }
+          }
+        },
+        "position": { "x": 1200, "y": 350 }
+      }
+    ],
+    "edges": [
+      {
+        "source": "chat-input-node",
+        "target": "demographics-node",
+        "source_output": "message",
+        "target_input": "user_input"
+      },
+      {
+        "source": "chat-input-node",
+        "target": "medical-vector-db",
+        "source_output": "message",
+        "target_input": "search_query"
+      },
+      {
+        "source": "demographics-node",
+        "target": "watsonx-guardrail-node",
+        "source_output": "prompt",
+        "target_input": "text_to_validate"
+      },
+      {
+        "source": "watsonx-guardrail-node",
+        "target": "granite-prompt-node",
+        "source_output": "safe_text",
+        "target_input": "aggregated_context"
+      },
+      {
+        "source": "medical-vector-db",
+        "target": "granite-prompt-node",
+        "source_output": "retrieved_documents",
+        "target_input": "rag_medical_docs"
+      },
+      {
+        "source": "granite-prompt-node",
+        "target": "ibm-granite-llm",
+        "source_output": "prompt",
+        "target_input": "prompt_text"
+      },
+      {
+        "source": "ibm-granite-llm",
+        "target": "chat-output-node",
+        "source_output": "generated_response",
+        "target_input": "output_value"
+      }
+    ]
+  }
+}
